@@ -73,3 +73,45 @@ class Pipeline:
             list(zip(predictions, boxes))
             for predictions, boxes in zip(prediction_groups, box_groups)
         ]
+        
+    def detect(self, images, detection_kwargs=None):
+        """Run the detection part only.
+
+        Args:
+            images: The images to parse (can be a list of actual images or a list of filepaths)
+            detection_kwargs: Arguments to pass to the detector call
+
+        Returns:
+            A list of lists of boxes.
+        """
+
+        # Make sure we have an image array to start with.
+        if not isinstance(images, np.ndarray):
+            images = [tools.read(image) for image in images]
+        # This turns images into (image, scale) tuples temporarily
+        images = [
+            tools.resize_image(image, max_scale=self.scale, max_size=self.max_size)
+            for image in images
+        ]
+        max_height, max_width = np.array(
+            [image.shape[:2] for image, scale in images]
+        ).max(axis=0)
+        scales = [scale for _, scale in images]
+        images = np.array(
+            [
+                tools.pad(image, width=max_width, height=max_height)
+                for image, _ in images
+            ]
+        )
+        if detection_kwargs is None:
+            detection_kwargs = {}
+        
+        box_groups = self.detector.detect(images=images, **detection_kwargs)
+        
+        box_groups = [
+            tools.adjust_boxes(boxes=boxes, boxes_format="boxes", scale=1 / scale)
+            if scale != 1
+            else boxes
+            for boxes, scale in zip(box_groups, scales)
+        ]
+        return box_groups
